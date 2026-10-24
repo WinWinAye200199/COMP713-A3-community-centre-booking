@@ -1,84 +1,144 @@
 package nz.ac.aut.community_centre_booking.service;
 
 import nz.ac.aut.community_centre_booking.dto.BookingRequest;
+import nz.ac.aut.community_centre_booking.dto.BookingResponse;
+import nz.ac.aut.community_centre_booking.model.AppUser;
 import nz.ac.aut.community_centre_booking.model.Booking;
+import nz.ac.aut.community_centre_booking.model.BookingStatus;
 import nz.ac.aut.community_centre_booking.model.Room;
+import nz.ac.aut.community_centre_booking.repository.AppUserRepository;
 import nz.ac.aut.community_centre_booking.repository.BookingRepository;
 import nz.ac.aut.community_centre_booking.repository.RoomRepository;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.NoSuchElementException;
 
-// contains main booking rules and logic for creating and deleting bookings
+// contains main booking rules: creating, approving, rejecting and cancelling bookings
 @Service
 public class BookingService {
 
+    // bookings with these statuses block the room time slot
+    private static final List<BookingStatus> ACTIVE_STATUSES =
+            List.of(BookingStatus.PENDING, BookingStatus.APPROVED);
+
     private final BookingRepository bookingRepository;
     private final RoomRepository roomRepository;
+    private final AppUserRepository userRepository;
 
     public BookingService(
             BookingRepository bookingRepository,
-            RoomRepository roomRepository) {
+            RoomRepository roomRepository,
+            AppUserRepository userRepository) {
 
         this.bookingRepository = bookingRepository;
         this.roomRepository = roomRepository;
+        this.userRepository = userRepository;
     }
 
-    // gets all current bookings
-    public List<Booking> getAllBookings() {
-        return bookingRepository.findAll();
+    // staff view: all bookings, or only bookings with the given status
+    @Transactional(readOnly = true)
+    public List<BookingResponse> getBookings(BookingStatus status) {
+        List<Booking> bookings = (status == null)
+                ? bookingRepository.findAllByOrderByBookingDateAscStartTimeAsc()
+                : bookingRepository.findByStatusOrderByBookingDateAscStartTimeAsc(status);
+
+        return bookings.stream().map(BookingResponse::from).toList();
     }
 
-    // creates a new booking with validation checks for room availability and time
-    // conflicts
+    // member view: bookings made by the logged-in member
+    @Transactional(readOnly = true)
+    public List<BookingResponse> getMyBookings(String email) {
+        AppUser member = findUser(email);
+
+        return bookingRepository.findByMemberOrderByBookingDateAscStartTimeAsc(member)
+                .stream()
+                .map(BookingResponse::from)
+                .toList();
+    }
+
+    // creates a pending booking after checking the time and room availability
     @Transactional
-    public Booking createBooking(BookingRequest request) {
+    public BookingResponse createBooking(BookingRequest request, String email) {
+        AppUser member = findUser(email);
 
         Room room = roomRepository.findById(request.roomId())
                 .orElseThrow(() -> new NoSuchElementException("Room not found."));
 
         if (!request.startTime().isBefore(request.endTime())) {
-            throw new IllegalArgumentException(
-                    "End time must be after start time.");
+            throw new IllegalArgumentException("End time must be after start time.");
         }
 
-        List<Booking> existingBookings = bookingRepository.findByRoomAndBookingDate(
+        long overlapping = bookingRepository.countOverlapping(
                 room,
-                request.bookingDate());
+                request.bookingDate(),
+                request.startTime(),
+                request.endTime(),
+                ACTIVE_STATUSES);
 
-        for (Booking existingBooking : existingBookings) {
-            // check for time overlap with existing bookings
-            boolean overlaps = request.startTime().isBefore(existingBooking.getEndTime())
-                    && request.endTime().isAfter(existingBooking.getStartTime());
-
-            if (overlaps) {
-                throw new IllegalStateException(
-                        "The room is already booked during this time.");
-            }
+        if (overlapping > 0) {
+            throw new IllegalStateException("The room is already booked during this time.");
         }
 
         Booking booking = new Booking(
-                request.customerName(),
-                request.customerEmail(),
+                member,
                 request.purpose(),
                 request.bookingDate(),
                 request.startTime(),
                 request.endTime(),
                 room);
 
-        return bookingRepository.save(booking);
+        return BookingResponse.from(bookingRepository.save(booking));
     }
 
-    // deletes a booking by its ID, throwing an exception if the booking does not
-    // exist
+    // staff approves or rejects a pending booking
     @Transactional
-    public void deleteBooking(Long id) {
+    public BookingResponse updateStatus(Long id, BookingStatus newStatus) {
+        if (newStatus != BookingStatus.APPROVED && newStatus != BookingStatus.REJECTED) {
+            throw new IllegalArgumentException("Status must be APPROVED or REJECTED.");
+        }
 
-        Booking booking = bookingRepository.findById(id)
+        Booking booking = findBooking(id);
+
+        if (booking.getStatus() != BookingStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Only pending bookings can be approved or rejected. Current status: " + booking.getStatus());
+        }
+
+        booking.setStatus(newStatus);
+        return BookingResponse.from(booking);
+    }
+
+    // member cancels their own booking, or staff cancels any booking
+    @Transactional
+    public BookingResponse cancelBooking(Long id, String email, boolean isStaff) {
+        Booking booking = findBooking(id);
+
+        boolean isOwner = booking.getMember() != null
+                && booking.getMember().getEmail().equals(email);
+
+        if (!isStaff && !isOwner) {
+            throw new AccessDeniedException("You can only cancel your own bookings.");
+        }
+
+        if (!ACTIVE_STATUSES.contains(booking.getStatus())) {
+            throw new IllegalStateException(
+                    "Only pending or approved bookings can be cancelled. Current status: " + booking.getStatus());
+        }
+
+        booking.setStatus(BookingStatus.CANCELLED);
+        return BookingResponse.from(booking);
+    }
+
+    private AppUser findUser(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new NoSuchElementException("User not found."));
+    }
+
+    private Booking findBooking(Long id) {
+        return bookingRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Booking not found."));
-
-        bookingRepository.delete(booking);
     }
 }
