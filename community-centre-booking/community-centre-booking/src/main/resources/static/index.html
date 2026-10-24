@@ -5,64 +5,66 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Community Centre Room Bookings</title>
+    <title>Community Centre Staff Dashboard</title>
 
     <script src="app.js" defer></script>
 </head>
 
 <body>
     <header>
-        <h1>Community Centre Room Bookings</h1>
-        <p>View rooms and make a booking.</p>
+        <h1>Community Centre Staff Dashboard</h1>
+        <p>Review and manage room booking requests.</p>
     </header>
 
     <main>
-        <section>
-            <h2>Create a booking</h2>
+        <section id="login-section">
+            <h2>Staff login</h2>
 
-            <!-- forms used to create bookings-->
-            <form id="booking-form">
-                <label for="customer-name">Name</label>
-                <input id="customer-name" name="customerName" type="text" required>
+            <form id="login-form">
+                <div>
+                    <label for="email">Email</label>
+                    <input id="email" name="email" type="email" required>
+                </div>
 
-                <label for="customer-email">Email</label>
-                <input id="customer-email" name="customerEmail" type="email" required>
+                <div>
+                    <label for="password">Password</label>
+                    <input id="password" name="password" type="password" required>
+                </div>
 
-                <label for="purpose">Booking purpose</label>
-                <input id="purpose" name="purpose" type="text" required>
-
-                <label for="room">Room</label>
-                <select id="room" name="roomId" required>
-                    <option value="">Select a room</option>
-                </select>
-
-                <label for="booking-date">Date</label>
-                <input id="booking-date" name="bookingDate" type="date" required>
-
-                <label for="start-time">Start time</label>
-                <input id="start-time" name="startTime" type="time" required>
-
-                <label for="end-time">End time</label>
-                <input id="end-time" name="endTime" type="time" required>
-
-                <button type="submit">Create booking</button>
+                <button id="login-button" type="submit">
+                    Log in
+                </button>
             </form>
 
-            <!-- displays form messages (success or error)-->
-            <p id="form-message"></p>
+            <p id="login-message" aria-live="polite"></p>
         </section>
 
-        <section>
-            <div class="section-heading">
-                <h2>Current bookings</h2>
+        <section id="dashboard-section" hidden>
+            <div>
+                <h2>Booking requests</h2>
+                <p id="staff-details"></p>
+
+                <button id="show-pending-button" type="button">
+                    Show pending
+                </button>
+
+                <button id="show-all-button" type="button">
+                    Show all
+                </button>
+
                 <button id="refresh-button" type="button">
                     Refresh
                 </button>
+
+                <button id="logout-button" type="button">
+                    Log out
+                </button>
             </div>
 
-            <!-- displays the list of current bookings -->
+            <p id="dashboard-message" aria-live="polite"></p>
+
             <div id="bookings-list">
-                <p>Loading bookings...</p>
+                <p>Log in to view bookings.</p>
             </div>
         </section>
     </main>
