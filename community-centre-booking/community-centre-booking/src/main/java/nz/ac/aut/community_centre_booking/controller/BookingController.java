@@ -2,17 +2,22 @@ package nz.ac.aut.community_centre_booking.controller;
 
 import jakarta.validation.Valid;
 import nz.ac.aut.community_centre_booking.dto.BookingRequest;
-import nz.ac.aut.community_centre_booking.model.Booking;
+import nz.ac.aut.community_centre_booking.dto.BookingResponse;
+import nz.ac.aut.community_centre_booking.dto.StatusUpdateRequest;
+import nz.ac.aut.community_centre_booking.model.BookingStatus;
 import nz.ac.aut.community_centre_booking.service.BookingService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 
 import java.net.URI;
 import java.util.List;
@@ -28,23 +33,34 @@ public class BookingController {
         this.bookingService = bookingService;
     }
 
-    // returns all current bookings
+    // staff: all bookings, optionally filtered by status (e.g. ?status=PENDING)
     @GetMapping
-    public List<Booking> getAllBookings() {
-        return bookingService.getAllBookings();
+    @PreAuthorize("hasRole('STAFF')")
+    public List<BookingResponse> getBookings(
+            @RequestParam(required = false) BookingStatus status) {
+        return bookingService.getBookings(status);
     }
 
-    // creates a booking and returns its location with a 201 response
-    @PostMapping
-    public ResponseEntity<Booking> createBooking(
-            @Valid @RequestBody BookingRequest request) {
+    // member: bookings made by the logged-in member
+    @GetMapping("/my")
+    @PreAuthorize("hasRole('MEMBER')")
+    public List<BookingResponse> getMyBookings(Authentication authentication) {
+        return bookingService.getMyBookings(authentication.getName());
+    }
 
-        Booking createdBooking = bookingService.createBooking(request);
+    // member: creates a pending booking and returns its location with a 201 response
+    @PostMapping
+    @PreAuthorize("hasRole('MEMBER')")
+    public ResponseEntity<BookingResponse> createBooking(
+            @Valid @RequestBody BookingRequest request,
+            Authentication authentication) {
+
+        BookingResponse createdBooking = bookingService.createBooking(request, authentication.getName());
 
         URI location = ServletUriComponentsBuilder
                 .fromCurrentRequest()
                 .path("/{id}")
-                .buildAndExpand(createdBooking.getId())
+                .buildAndExpand(createdBooking.id())
                 .toUri();
 
         return ResponseEntity
@@ -52,10 +68,24 @@ public class BookingController {
                 .body(createdBooking);
     }
 
-    // deletes booking and returns a 204 response
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteBooking(@PathVariable Long id) {
-        bookingService.deleteBooking(id);
-        return ResponseEntity.noContent().build();
+    // staff: approves or rejects a pending booking
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('STAFF')")
+    public BookingResponse updateStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody StatusUpdateRequest request) {
+        return bookingService.updateStatus(id, request.status());
+    }
+
+    // member cancels own booking, staff can cancel any booking
+    @PatchMapping("/{id}/cancel")
+    public BookingResponse cancelBooking(
+            @PathVariable Long id,
+            Authentication authentication) {
+
+        boolean isStaff = authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_STAFF".equals(authority.getAuthority()));
+
+        return bookingService.cancelBooking(id, authentication.getName(), isStaff);
     }
 }
