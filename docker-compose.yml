@@ -1,0 +1,7 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: ccb-rabbitmq
+    ports:
+      - "5672:5672"    # AMQP (apps connect here)
+      - "15672:15672"  # Management UI (guest / guest)

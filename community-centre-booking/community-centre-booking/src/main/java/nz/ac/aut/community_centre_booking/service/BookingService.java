@@ -2,6 +2,7 @@ package nz.ac.aut.community_centre_booking.service;
 
 import nz.ac.aut.community_centre_booking.dto.BookingRequest;
 import nz.ac.aut.community_centre_booking.dto.BookingResponse;
+import nz.ac.aut.community_centre_booking.event.BookingStatusChangedEvent;
 import nz.ac.aut.community_centre_booking.model.AppUser;
 import nz.ac.aut.community_centre_booking.model.Booking;
 import nz.ac.aut.community_centre_booking.model.BookingStatus;
@@ -9,6 +10,7 @@ import nz.ac.aut.community_centre_booking.model.Room;
 import nz.ac.aut.community_centre_booking.repository.AppUserRepository;
 import nz.ac.aut.community_centre_booking.repository.BookingRepository;
 import nz.ac.aut.community_centre_booking.repository.RoomRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,15 +29,18 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final RoomRepository roomRepository;
     private final AppUserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public BookingService(
             BookingRepository bookingRepository,
             RoomRepository roomRepository,
-            AppUserRepository userRepository) {
+            AppUserRepository userRepository,
+            ApplicationEventPublisher eventPublisher) {
 
         this.bookingRepository = bookingRepository;
         this.roomRepository = roomRepository;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     // staff view: all bookings, or only bookings with the given status
@@ -107,7 +112,10 @@ public class BookingService {
                     "Only pending bookings can be approved or rejected. Current status: " + booking.getStatus());
         }
 
+        BookingStatus oldStatus = booking.getStatus();
         booking.setStatus(newStatus);
+        publishStatusChange(booking, oldStatus);
+
         return BookingResponse.from(booking);
     }
 
@@ -128,8 +136,19 @@ public class BookingService {
                     "Only pending or approved bookings can be cancelled. Current status: " + booking.getStatus());
         }
 
+        BookingStatus oldStatus = booking.getStatus();
         booking.setStatus(BookingStatus.CANCELLED);
+        publishStatusChange(booking, oldStatus);
+
         return BookingResponse.from(booking);
+    }
+
+    // A3: raises an internal event; it is sent to RabbitMQ only after the transaction commits
+    private void publishStatusChange(Booking booking, BookingStatus oldStatus) {
+        if (booking.getMember() == null) {
+            return; // A2 bookings without a member cannot receive notifications
+        }
+        eventPublisher.publishEvent(BookingStatusChangedEvent.from(booking, oldStatus));
     }
 
     private AppUser findUser(String email) {
