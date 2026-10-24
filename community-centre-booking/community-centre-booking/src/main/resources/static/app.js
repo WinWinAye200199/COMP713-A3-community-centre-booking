@@ -1,201 +1,289 @@
-const bookingForm = document.getElementById("booking-form");
-const roomSelect = document.getElementById("room");
+const loginSection = document.getElementById("login-section");
+const dashboardSection = document.getElementById(
+    "dashboard-section"
+);
+
+const loginForm = document.getElementById("login-form");
+const loginButton = document.getElementById("login-button");
+const loginMessage = document.getElementById("login-message");
+
+const staffDetails = document.getElementById("staff-details");
+const dashboardMessage = document.getElementById(
+    "dashboard-message"
+);
 const bookingsList = document.getElementById("bookings-list");
-const formMessage = document.getElementById("form-message");
+
+const showPendingButton = document.getElementById(
+    "show-pending-button"
+);
+const showAllButton = document.getElementById("show-all-button");
 const refreshButton = document.getElementById("refresh-button");
-const dateInput = document.getElementById("booking-date");
+const logoutButton = document.getElementById("logout-button");
 
-setMinimumDate();
-// loads rooms and bookings when the page is loaded
-loadRooms();
-loadBookings();
+let authorization = null;
+let currentFilter = "PENDING";
 
-bookingForm.addEventListener("submit", createBooking);
+loginForm.addEventListener("submit", login);
+showPendingButton.addEventListener("click", showPending);
+showAllButton.addEventListener("click", showAll);
 refreshButton.addEventListener("click", loadBookings);
+logoutButton.addEventListener("click", logout);
 
-function setMinimumDate() {
-    const today = new Date();
+// Verifies the credentials and confirms the account has the staff role.
+async function login(event) {
+    event.preventDefault();
 
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
+    loginButton.disabled = true;
+    loginMessage.textContent = "Logging in...";
 
-    dateInput.min = `${year}-${month}-${day}`;
-}
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
 
-// loads rooms into the form
-async function loadRooms() {
+    const credentials = `${email}:${password}`;
+    const attemptedAuthorization = `Basic ${btoa(credentials)}`;
+
     try {
-        const response = await fetch("/api/rooms");
+        const response = await fetch("/api/auth/me", {
+            headers: {
+                Authorization: attemptedAuthorization
+            }
+        });
 
         if (!response.ok) {
-            throw new Error("Rooms could not be loaded.");
+            loginMessage.textContent =
+                response.status === 401
+                    ? "Incorrect email or password."
+                    : await readErrorMessage(
+                        response,
+                        "Login failed."
+                    );
+
+            return;
         }
 
-        const rooms = await response.json();
+        const user = await response.json();
 
-        for (const room of rooms) {
-            const option = document.createElement("option");
-
-            option.value = room.id;
-            option.textContent =
-                `${room.name} - capacity ${room.capacity}`;
-
-            roomSelect.appendChild(option);
+        if (user.role !== "STAFF") {
+            loginMessage.textContent =
+                "This dashboard is only available to staff.";
+            return;
         }
+
+        authorization = attemptedAuthorization;
+
+        staffDetails.textContent =
+            `Logged in as ${user.name} (${user.email})`;
+
+        loginMessage.textContent = "";
+        loginSection.hidden = true;
+        dashboardSection.hidden = false;
+
+        await loadBookings();
     } catch (error) {
-        formMessage.textContent = error.message;
-        formMessage.className = "error";
+        loginMessage.textContent =
+            "Could not connect to the server.";
+    } finally {
+        loginButton.disabled = false;
     }
 }
 
-// loads bookings into the page
+async function showPending() {
+    currentFilter = "PENDING";
+    await loadBookings();
+}
+
+async function showAll() {
+    currentFilter = null;
+    await loadBookings();
+}
+
+// Retrieves bookings using the logged-in staff credentials.
 async function loadBookings() {
-    bookingsList.textContent = "Loading bookings...";
+    if (!authorization) {
+        return;
+    }
+
+    bookingsList.textContent = "";
+    dashboardMessage.textContent = "Loading bookings...";
+
+    const url = currentFilter
+        ? `/api/bookings?status=${currentFilter}`
+        : "/api/bookings";
 
     try {
-        const response = await fetch("/api/bookings");
+        const response = await fetch(url, {
+            headers: {
+                Authorization: authorization
+            }
+        });
+
+        if (response.status === 401) {
+            logout();
+            loginMessage.textContent =
+                "Your login session has expired.";
+            return;
+        }
 
         if (!response.ok) {
-            throw new Error("Bookings could not be loaded.");
+            dashboardMessage.textContent =
+                await readErrorMessage(
+                    response,
+                    "Bookings could not be loaded."
+                );
+
+            return;
         }
 
         const bookings = await response.json();
 
-        bookingsList.textContent = "";
+        dashboardMessage.textContent = currentFilter
+            ? "Showing pending bookings."
+            : "Showing all bookings.";
 
         if (bookings.length === 0) {
             const message = document.createElement("p");
-            message.textContent = "There are currently no bookings.";
+            message.textContent = currentFilter
+                ? "There are no pending bookings."
+                : "There are currently no bookings.";
+
             bookingsList.appendChild(message);
             return;
         }
 
         for (const booking of bookings) {
-            const card = document.createElement("article");
-            card.className = "booking-card";
-
-            const heading = document.createElement("h3");
-            heading.textContent = booking.purpose;
-
-            const room = document.createElement("p");
-            room.textContent = `Room: ${booking.room.name}`;
-
-            const date = document.createElement("p");
-            date.textContent = `Date: ${booking.bookingDate}`;
-
-            const time = document.createElement("p");
-            time.textContent =
-                `Time: ${booking.startTime.substring(0, 5)}–` +
-                `${booking.endTime.substring(0, 5)}`;
-
-            const customer = document.createElement("p");
-            customer.textContent =
-                `Booked by: ${booking.customerName}`;
-
-            const cancelButton = document.createElement("button");
-            cancelButton.type = "button";
-            cancelButton.className = "cancel-button";
-            cancelButton.textContent = "Cancel booking";
-
-            cancelButton.addEventListener("click", function () {
-                cancelBooking(booking.id);
-            });
-
-            card.appendChild(heading);
-            card.appendChild(room);
-            card.appendChild(date);
-            card.appendChild(time);
-            card.appendChild(customer);
-            card.appendChild(cancelButton);
-
-            bookingsList.appendChild(card);
+            bookingsList.appendChild(
+                createBookingCard(booking)
+            );
         }
     } catch (error) {
-        bookingsList.textContent = error.message;
+        dashboardMessage.textContent =
+            "Could not connect to the server.";
     }
 }
 
-// creates a new booking
-async function createBooking(event) {
-    event.preventDefault();
+// Creates one staff booking card from API response data.
+function createBookingCard(booking) {
+    const card = document.createElement("article");
 
-    formMessage.textContent = "";
-    formMessage.className = "";
+    const heading = document.createElement("h3");
+    heading.textContent = booking.purpose;
 
-    const request = {
-        customerName:
-            document.getElementById("customer-name").value,
-        customerEmail:
-            document.getElementById("customer-email").value,
-        purpose:
-            document.getElementById("purpose").value,
-        bookingDate:
-            document.getElementById("booking-date").value,
-        startTime:
-            document.getElementById("start-time").value,
-        endTime:
-            document.getElementById("end-time").value,
-        roomId:
-            Number(document.getElementById("room").value)
-    };
+    const room = document.createElement("p");
+    room.textContent = `Room: ${booking.roomName}`;
 
-    try {
-        const response = await fetch("/api/bookings", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(request)
+    const member = document.createElement("p");
+    member.textContent =
+        `Member: ${booking.memberName} (${booking.memberEmail})`;
+
+    const date = document.createElement("p");
+    date.textContent = `Date: ${booking.bookingDate}`;
+
+    const time = document.createElement("p");
+    time.textContent =
+        `Time: ${formatTime(booking.startTime)}–` +
+        `${formatTime(booking.endTime)}`;
+
+    const status = document.createElement("p");
+    status.textContent = `Status: ${booking.status}`;
+
+    card.appendChild(heading);
+    card.appendChild(room);
+    card.appendChild(member);
+    card.appendChild(date);
+    card.appendChild(time);
+    card.appendChild(status);
+
+    if (booking.status === "PENDING") {
+        const approveButton = document.createElement("button");
+        approveButton.type = "button";
+        approveButton.textContent = "Approve";
+
+        approveButton.addEventListener("click", () => {
+            updateBookingStatus(booking.id, "APPROVED");
         });
 
-        const responseBody = await response.json();
+        const rejectButton = document.createElement("button");
+        rejectButton.type = "button";
+        rejectButton.textContent = "Reject";
+
+        rejectButton.addEventListener("click", () => {
+            updateBookingStatus(booking.id, "REJECTED");
+        });
+
+        card.appendChild(approveButton);
+        card.appendChild(rejectButton);
+    }
+
+    return card;
+}
+
+// Approves or rejects a pending booking.
+async function updateBookingStatus(bookingId, newStatus) {
+    dashboardMessage.textContent =
+        `Updating booking ${bookingId}...`;
+
+    try {
+        const response = await fetch(
+            `/api/bookings/${bookingId}/status`,
+            {
+                method: "PATCH",
+                headers: {
+                    Authorization: authorization,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    status: newStatus
+                })
+            }
+        );
 
         if (!response.ok) {
-            throw new Error(
-                responseBody.message || "The booking could not be created."
-            );
+            dashboardMessage.textContent =
+                await readErrorMessage(
+                    response,
+                    "The booking could not be updated."
+                );
+
+            return;
         }
 
-        formMessage.textContent = "Booking created successfully.";
-        formMessage.className = "success";
-
-        bookingForm.reset();
-        setMinimumDate();
-
         await loadBookings();
+
+        dashboardMessage.textContent =
+            `Booking ${bookingId} changed to ${newStatus}.`;
     } catch (error) {
-        formMessage.textContent = error.message;
-        formMessage.className = "error";
+        dashboardMessage.textContent =
+            "Could not connect to the server.";
     }
 }
 
-// cancels a booking
-async function cancelBooking(id) {
-    const confirmed = window.confirm(
-        "Are you sure you want to cancel this booking?"
-    );
+function logout() {
+    authorization = null;
+    currentFilter = "PENDING";
 
-    if (!confirmed) {
-        return;
+    document.getElementById("password").value = "";
+
+    bookingsList.textContent = "";
+    staffDetails.textContent = "";
+    dashboardMessage.textContent = "";
+
+    dashboardSection.hidden = true;
+    loginSection.hidden = false;
+}
+
+function formatTime(time) {
+    if (time && time.length >= 5) {
+        return time.substring(0, 5);
     }
 
+    return time;
+}
+
+async function readErrorMessage(response, fallback) {
     try {
-        const response = await fetch(`/api/bookings/${id}`, {
-            method: "DELETE"
-        });
-
-        if (!response.ok) {
-            const responseBody = await response.json();
-
-            throw new Error(
-                responseBody.message ||
-                "The booking could not be cancelled."
-            );
-        }
-
-        await loadBookings();
+        const body = await response.json();
+        return body.message || fallback;
     } catch (error) {
-        window.alert(error.message);
+        return fallback;
     }
 }
