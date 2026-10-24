@@ -20,9 +20,10 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
-        // plain 401 without WWW-Authenticate header, so browsers do not show a login popup
-        AuthenticationEntryPoint unauthorized =
-                (request, response, ex) -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+        // plain 401 without WWW-Authenticate header, so browsers do not show a login
+        // popup
+        AuthenticationEntryPoint unauthorized = (request, response, ex) -> response
+                .sendError(HttpServletResponse.SC_UNAUTHORIZED);
 
         http
                 // REST API with HTTP Basic does not use browser sessions, so CSRF is disabled
@@ -32,6 +33,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // web page files are public
                         .requestMatchers("/", "/index.html", "/*.js", "/*.css").permitAll()
+                        // Allows the browser to establish the WebSocket connection.
+                        .requestMatchers("/ws/**").permitAll()
                         // anyone can view rooms
                         .requestMatchers(HttpMethod.GET, "/api/rooms/**").permitAll()
                         // everything else needs login
