@@ -40,6 +40,13 @@
             android:layout_marginTop="12dp"
             android:text="Create a booking" />
 
+        <Button
+            android:id="@+id/myBookingsButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="My bookings" />
+
         <ProgressBar
             android:id="@+id/roomsProgress"
             android:layout_width="wrap_content"

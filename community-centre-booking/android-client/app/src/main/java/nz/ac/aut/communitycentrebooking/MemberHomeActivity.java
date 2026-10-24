@@ -31,6 +31,7 @@ public class MemberHomeActivity extends AppCompatActivity {
     private TextView roomsMessage;
     private Button refreshRoomsButton;
     private Button createBookingButton;
+    private Button myBookingsButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,6 +61,7 @@ public class MemberHomeActivity extends AppCompatActivity {
         roomsMessage = findViewById(R.id.roomsMessage);
         refreshRoomsButton = findViewById(R.id.refreshRoomsButton);
         createBookingButton = findViewById(R.id.createBookingButton);
+        myBookingsButton = findViewById(R.id.myBookingsButton);
 
         refreshRoomsButton.setOnClickListener(view -> loadRooms());
 
@@ -68,6 +70,17 @@ public class MemberHomeActivity extends AppCompatActivity {
                     Intent intent = new Intent(
                             MemberHomeActivity.this,
                             BookingActivity.class
+                    );
+
+                    startActivity(intent);
+                }
+        );
+
+        myBookingsButton.setOnClickListener(
+                view -> {
+                    Intent intent = new Intent(
+                            MemberHomeActivity.this,
+                            MyBookingsActivity.class
                     );
 
                     startActivity(intent);
