@@ -17,6 +17,8 @@ import java.nio.charset.StandardCharsets;
 
 import nz.ac.aut.communitycentrebooking.model.UserResponse;
 import nz.ac.aut.communitycentrebooking.network.ApiClient;
+import android.content.Intent;
+import nz.ac.aut.communitycentrebooking.session.SessionManager;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -103,9 +105,16 @@ public class MainActivity extends AppCompatActivity {
                                 return;
                             }
 
-                            loginMessage.setText(
-                                    "Welcome, " + user.getName() + "!"
+                            SessionManager.startSession(authorization, user);
+
+                            Intent intent = new Intent(
+                                    MainActivity.this,
+                                    MemberHomeActivity.class
                             );
+
+                            startActivity(intent);
+                            finish();
+
                         } else if (response.code() == 401) {
                             loginMessage.setText(
                                     "Incorrect email or password."
