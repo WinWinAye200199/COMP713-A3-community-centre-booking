@@ -8,6 +8,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.content.Intent;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -29,6 +30,7 @@ public class MemberHomeActivity extends AppCompatActivity {
     private ProgressBar roomsProgress;
     private TextView roomsMessage;
     private Button refreshRoomsButton;
+    private Button createBookingButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,8 +59,20 @@ public class MemberHomeActivity extends AppCompatActivity {
         roomsProgress = findViewById(R.id.roomsProgress);
         roomsMessage = findViewById(R.id.roomsMessage);
         refreshRoomsButton = findViewById(R.id.refreshRoomsButton);
+        createBookingButton = findViewById(R.id.createBookingButton);
 
         refreshRoomsButton.setOnClickListener(view -> loadRooms());
+
+        createBookingButton.setOnClickListener(
+                view -> {
+                    Intent intent = new Intent(
+                            MemberHomeActivity.this,
+                            BookingActivity.class
+                    );
+
+                    startActivity(intent);
+                }
+        );
 
         loadRooms();
     }
