@@ -12,6 +12,9 @@ const dashboardMessage = document.getElementById(
     "dashboard-message"
 );
 const bookingsList = document.getElementById("bookings-list");
+const websocketStatus = document.getElementById(
+    "websocket-status"
+);
 
 const showPendingButton = document.getElementById(
     "show-pending-button"
@@ -306,6 +309,7 @@ function connectBookingWebSocket() {
     }
 
     shouldReconnect = true;
+    websocketStatus.textContent = "Live updates connecting...";
 
     const protocol =
         window.location.protocol === "https:" ? "wss" : "ws";
@@ -316,14 +320,24 @@ function connectBookingWebSocket() {
 
     bookingSocket.addEventListener("open", async () => {
         console.log("Booking WebSocket connected");
+        websocketStatus.textContent = "Live updates connected.";
 
         if (reconnectTimer !== null) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
         }
 
-        // Restores the current state, including changes missed while disconnected.
+        const restorationStarted = performance.now();
+
+        // Retrieves changes that may have occurred while disconnected.
         await loadBookings();
+
+        const restorationTime =
+            (performance.now() - restorationStarted) / 1000;
+
+        console.log(
+            `Dashboard state restored in ${restorationTime.toFixed(3)} seconds`
+        );
     });
 
     bookingSocket.addEventListener("message", async (event) => {
@@ -341,6 +355,11 @@ function connectBookingWebSocket() {
     bookingSocket.addEventListener("close", () => {
         bookingSocket = null;
 
+        if (shouldReconnect) {
+            websocketStatus.textContent =
+                "Live updates disconnected. Reconnecting...";
+        }
+
         if (shouldReconnect && reconnectTimer === null) {
             reconnectTimer = window.setTimeout(() => {
                 reconnectTimer = null;
@@ -351,6 +370,9 @@ function connectBookingWebSocket() {
 
     bookingSocket.addEventListener("error", () => {
         console.error("Booking WebSocket connection failed");
+
+        websocketStatus.textContent =
+            "Live updates unavailable. Retrying...";
     });
 }
 
@@ -367,4 +389,5 @@ function disconnectBookingWebSocket() {
         bookingSocket.close();
         bookingSocket = null;
     }
+    websocketStatus.textContent = "";
 }
