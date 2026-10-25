@@ -23,6 +23,7 @@ import nz.ac.aut.communitycentrebooking.network.ApiClient;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+import nz.ac.aut.communitycentrebooking.session.SessionManager;
 
 public class MemberHomeActivity extends AppCompatActivity {
 
@@ -33,6 +34,7 @@ public class MemberHomeActivity extends AppCompatActivity {
     private Button createBookingButton;
     private Button myBookingsButton;
     private Button notificationsButton;
+    private Button logoutButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +66,7 @@ public class MemberHomeActivity extends AppCompatActivity {
         createBookingButton = findViewById(R.id.createBookingButton);
         myBookingsButton = findViewById(R.id.myBookingsButton);
         notificationsButton = findViewById(R.id.notificationsButton);
+        logoutButton = findViewById(R.id.logoutButton);
 
         notificationsButton.setOnClickListener(view -> {
             Intent intent = new Intent(
@@ -97,6 +100,8 @@ public class MemberHomeActivity extends AppCompatActivity {
                     startActivity(intent);
                 }
         );
+
+        logoutButton.setOnClickListener(view -> logout());
 
         loadRooms();
     }
@@ -208,5 +213,22 @@ public class MemberHomeActivity extends AppCompatActivity {
         return (int) (
                 value * getResources().getDisplayMetrics().density
         );
+    }
+    // Clears the member session and returns to the login screen.
+    private void logout() {
+        SessionManager.clearSession();
+
+        Intent intent = new Intent(
+                MemberHomeActivity.this,
+                MainActivity.class
+        );
+
+        intent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK |
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK
+        );
+
+        startActivity(intent);
+        finish();
     }
 }
