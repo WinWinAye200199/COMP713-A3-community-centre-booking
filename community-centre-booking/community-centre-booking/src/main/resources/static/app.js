@@ -22,6 +22,9 @@ const logoutButton = document.getElementById("logout-button");
 
 let authorization = null;
 let currentFilter = "PENDING";
+let bookingSocket = null;
+let reconnectTimer = null;
+let shouldReconnect = false;
 
 loginForm.addEventListener("submit", login);
 showPendingButton.addEventListener("click", showPending);
@@ -79,6 +82,7 @@ async function login(event) {
         dashboardSection.hidden = false;
 
         await loadBookings();
+        connectBookingWebSocket();
     } catch (error) {
         loginMessage.textContent =
             "Could not connect to the server.";
@@ -258,6 +262,7 @@ async function updateBookingStatus(bookingId, newStatus) {
 }
 
 function logout() {
+    disconnectBookingWebSocket();
     authorization = null;
     currentFilter = "PENDING";
 
@@ -285,5 +290,81 @@ async function readErrorMessage(response, fallback) {
         return body.message || fallback;
     } catch (error) {
         return fallback;
+    }
+}
+
+// Opens the live booking-update connection for the staff dashboard.
+function connectBookingWebSocket() {
+    if (
+        bookingSocket !== null &&
+        (
+            bookingSocket.readyState === WebSocket.OPEN ||
+            bookingSocket.readyState === WebSocket.CONNECTING
+        )
+    ) {
+        return;
+    }
+
+    shouldReconnect = true;
+
+    const protocol =
+        window.location.protocol === "https:" ? "wss" : "ws";
+
+    bookingSocket = new WebSocket(
+        `${protocol}://${window.location.host}/ws/bookings`
+    );
+
+    bookingSocket.addEventListener("open", async () => {
+        console.log("Booking WebSocket connected");
+
+        if (reconnectTimer !== null) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+
+        // Restores the current state, including changes missed while disconnected.
+        await loadBookings();
+    });
+
+    bookingSocket.addEventListener("message", async (event) => {
+        try {
+            const message = JSON.parse(event.data);
+
+            if (message.type === "BOOKING_CHANGED") {
+                await loadBookings();
+            }
+        } catch (error) {
+            console.error("Invalid WebSocket message:", error);
+        }
+    });
+
+    bookingSocket.addEventListener("close", () => {
+        bookingSocket = null;
+
+        if (shouldReconnect && reconnectTimer === null) {
+            reconnectTimer = window.setTimeout(() => {
+                reconnectTimer = null;
+                connectBookingWebSocket();
+            }, 2000);
+        }
+    });
+
+    bookingSocket.addEventListener("error", () => {
+        console.error("Booking WebSocket connection failed");
+    });
+}
+
+// Stops reconnecting when the staff member logs out.
+function disconnectBookingWebSocket() {
+    shouldReconnect = false;
+
+    if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+
+    if (bookingSocket !== null) {
+        bookingSocket.close();
+        bookingSocket = null;
     }
 }
