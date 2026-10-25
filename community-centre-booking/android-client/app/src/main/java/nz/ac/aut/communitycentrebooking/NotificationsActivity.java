@@ -24,8 +24,27 @@ import nz.ac.aut.communitycentrebooking.session.SessionManager;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+import android.Manifest;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.pm.PackageManager;
+import android.os.Build;
+
+import androidx.core.content.ContextCompat;
+import android.app.PendingIntent;
+import android.content.Intent;
+import android.content.SharedPreferences;
+
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
 public class NotificationsActivity extends AppCompatActivity {
+
+    private static final String CHANNEL_ID =
+            "booking_updates";
+
+    private static final int NOTIFICATION_PERMISSION_REQUEST =
+            100;
 
     private LinearLayout notificationsContainer;
     private ProgressBar notificationsProgress;
@@ -36,6 +55,8 @@ public class NotificationsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_notifications);
+        createNotificationChannel();
+        requestNotificationPermission();
 
         ViewCompat.setOnApplyWindowInsetsListener(
                 findViewById(R.id.main),
@@ -120,6 +141,10 @@ public class NotificationsActivity extends AppCompatActivity {
                             );
                             return;
                         }
+
+                        showSystemNotificationIfNew(
+                                notifications.get(0)
+                        );
 
                         for (NotificationResponse notification
                                 : notifications) {
@@ -207,6 +232,127 @@ public class NotificationsActivity extends AppCompatActivity {
         );
 
         refreshNotificationsButton.setEnabled(!loading);
+    }
+
+    // Displays the newest backend notification once on the Android device.
+    private void showSystemNotificationIfNew(
+            NotificationResponse notification) {
+
+        if (notification.getId() == null) {
+            return;
+        }
+
+        if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(
+                                this,
+                                Manifest.permission.POST_NOTIFICATIONS
+                        ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return;
+        }
+
+        SharedPreferences preferences =
+                getSharedPreferences(
+                        "notification_preferences",
+                        MODE_PRIVATE
+                );
+
+        long lastNotificationId =
+                preferences.getLong(
+                        "last_notification_id",
+                        0L
+                );
+
+        if (notification.getId() <= lastNotificationId) {
+            return;
+        }
+
+        Intent intent = new Intent(
+                this,
+                NotificationsActivity.class
+        );
+
+        intent.setFlags(
+                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+        );
+
+        PendingIntent pendingIntent =
+                PendingIntent.getActivity(
+                        this,
+                        0,
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT |
+                                PendingIntent.FLAG_IMMUTABLE
+                );
+
+        NotificationCompat.Builder builder =
+                new NotificationCompat.Builder(
+                        this,
+                        CHANNEL_ID
+                )
+                        .setSmallIcon(
+                                R.drawable.ic_launcher_foreground
+                        )
+                        .setContentTitle("Booking update")
+                        .setContentText(notification.getMessage())
+                        .setPriority(
+                                NotificationCompat.PRIORITY_HIGH
+                        )
+                        .setContentIntent(pendingIntent)
+                        .setAutoCancel(true);
+
+        NotificationManagerCompat.from(this).notify(
+                notification.getId().intValue(),
+                builder.build()
+        );
+
+        preferences.edit()
+                .putLong(
+                        "last_notification_id",
+                        notification.getId()
+                )
+                .apply();
+    }
+
+    // Creates the Android channel used for booking-status notifications.
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel =
+                    new NotificationChannel(
+                            CHANNEL_ID,
+                            "Booking updates",
+                            NotificationManager.IMPORTANCE_HIGH
+                    );
+
+            channel.setDescription(
+                    "Updates when a community centre booking changes status."
+            );
+
+            NotificationManager notificationManager =
+                    getSystemService(NotificationManager.class);
+
+            notificationManager.createNotificationChannel(channel);
+        }
+    }
+
+    // Android 13 and newer require notification permission at runtime.
+    private void requestNotificationPermission() {
+        if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(
+                                this,
+                                Manifest.permission.POST_NOTIFICATIONS
+                        ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                    new String[]{
+                            Manifest.permission.POST_NOTIFICATIONS
+                    },
+                    NOTIFICATION_PERMISSION_REQUEST
+            );
+        }
     }
 
     private int dp(int value) {
