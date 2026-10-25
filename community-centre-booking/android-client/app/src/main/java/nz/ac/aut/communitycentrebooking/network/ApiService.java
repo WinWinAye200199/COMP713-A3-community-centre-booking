@@ -13,6 +13,7 @@ import retrofit2.http.Header;
 import retrofit2.http.POST;
 import retrofit2.http.PATCH;
 import retrofit2.http.Path;
+import nz.ac.aut.communitycentrebooking.model.NotificationResponse;
 
 // Defines the HTTP requests made to the Spring Boot API.
 public interface ApiService {
@@ -40,5 +41,10 @@ public interface ApiService {
     Call<BookingResponse> cancelBooking(
             @Header("Authorization") String authorization,
             @Path("id") Long bookingId
+    );
+
+    @GET("api/notifications/my")
+    Call<List<NotificationResponse>> getMyNotifications(
+            @Header("Authorization") String authorization
     );
 }
