@@ -1,5 +1,14 @@
 package nz.ac.aut.community_centre_booking.service;
 
+import java.util.List;
+import java.util.NoSuchElementException;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
+
 import nz.ac.aut.community_centre_booking.dto.BookingRequest;
 import nz.ac.aut.community_centre_booking.dto.BookingResponse;
 import nz.ac.aut.community_centre_booking.event.BookingStatusChangedEvent;
@@ -10,13 +19,6 @@ import nz.ac.aut.community_centre_booking.model.Room;
 import nz.ac.aut.community_centre_booking.repository.AppUserRepository;
 import nz.ac.aut.community_centre_booking.repository.BookingRepository;
 import nz.ac.aut.community_centre_booking.repository.RoomRepository;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.NoSuchElementException;
 
 // contains main booking rules: creating, approving, rejecting and cancelling bookings
 @Service
@@ -65,11 +67,11 @@ public class BookingService {
     }
 
     // creates a pending booking after checking the time and room availability
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public BookingResponse createBooking(BookingRequest request, String email) {
         AppUser member = findUser(email);
 
-        Room room = roomRepository.findById(request.roomId())
+        Room room = roomRepository.findByIdForUpdate(request.roomId())
                 .orElseThrow(() -> new NoSuchElementException("Room not found."));
 
         if (!request.startTime().isBefore(request.endTime())) {
