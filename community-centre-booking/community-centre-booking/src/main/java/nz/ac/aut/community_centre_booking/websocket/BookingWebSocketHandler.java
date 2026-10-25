@@ -52,12 +52,13 @@ public class BookingWebSocketHandler extends TextWebSocketHandler {
     }
 
     // Notifies connected dashboards that booking data has changed.
-    public void broadcastBookingChanged(Long bookingId) {
+    public void broadcastBookingChanged(Long bookingId, String changeType) {
         try {
             String json = objectMapper.writeValueAsString(
                     Map.of(
                             "type", "BOOKING_CHANGED",
-                            "bookingId", bookingId));
+                            "bookingId", bookingId,
+                            "changeType", changeType));
 
             TextMessage message = new TextMessage(json);
 
