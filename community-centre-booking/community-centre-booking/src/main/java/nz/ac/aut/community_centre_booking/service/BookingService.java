@@ -19,14 +19,21 @@ import nz.ac.aut.community_centre_booking.model.Room;
 import nz.ac.aut.community_centre_booking.repository.AppUserRepository;
 import nz.ac.aut.community_centre_booking.repository.BookingRepository;
 import nz.ac.aut.community_centre_booking.repository.RoomRepository;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import nz.ac.aut.community_centre_booking.event.BookingChangedEvent;
+
+import java.util.List;
+import java.util.NoSuchElementException;
 
 // contains main booking rules: creating, approving, rejecting and cancelling bookings
 @Service
 public class BookingService {
 
     // bookings with these statuses block the room time slot
-    private static final List<BookingStatus> ACTIVE_STATUSES =
-            List.of(BookingStatus.PENDING, BookingStatus.APPROVED);
+    private static final List<BookingStatus> ACTIVE_STATUSES = List.of(BookingStatus.PENDING, BookingStatus.APPROVED);
 
     private final BookingRepository bookingRepository;
     private final RoomRepository roomRepository;
@@ -97,7 +104,14 @@ public class BookingService {
                 request.endTime(),
                 room);
 
-        return BookingResponse.from(bookingRepository.save(booking));
+        Booking savedBooking = bookingRepository.save(booking);
+
+        eventPublisher.publishEvent(
+                new BookingChangedEvent(
+                        savedBooking.getId(),
+                        "CREATED"));
+
+        return BookingResponse.from(savedBooking);
     }
 
     // staff approves or rejects a pending booking
@@ -117,6 +131,11 @@ public class BookingService {
         BookingStatus oldStatus = booking.getStatus();
         booking.setStatus(newStatus);
         publishStatusChange(booking, oldStatus);
+
+        eventPublisher.publishEvent(
+                new BookingChangedEvent(
+                        booking.getId(),
+                        "STATUS_CHANGED"));
 
         return BookingResponse.from(booking);
     }
@@ -142,10 +161,16 @@ public class BookingService {
         booking.setStatus(BookingStatus.CANCELLED);
         publishStatusChange(booking, oldStatus);
 
+        eventPublisher.publishEvent(
+                new BookingChangedEvent(
+                        booking.getId(),
+                        "CANCELLED"));
+
         return BookingResponse.from(booking);
     }
 
-    // A3: raises an internal event; it is sent to RabbitMQ only after the transaction commits
+    // A3: raises an internal event; it is sent to RabbitMQ only after the
+    // transaction commits
     private void publishStatusChange(Booking booking, BookingStatus oldStatus) {
         if (booking.getMember() == null) {
             return; // A2 bookings without a member cannot receive notifications
