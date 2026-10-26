@@ -4,3 +4,7 @@ local-env.sh
 
 # macOS
 .DS_Store
+
+# IntelliJ and Android Studio workspace settings
+.idea/
+**/.idea/
