@@ -13,7 +13,7 @@ A distributed booking system for a community centre. Members book rooms from a *
 ```
  Android app (MEMBER)          Web client (STAFF / MEMBER)
         │  REST + HTTP Basic          │  REST + HTTP Basic
-        └──────────────┬──────────────┘
+        └──────────────┬──────────────┘  WebSocket /ws/bookings
                        ▼
          Booking API (Spring Boot, :8080)
           controller → service → repository
@@ -33,9 +33,11 @@ A distributed booking system for a community centre. Members book rooms from a *
 |---|---|---|
 | Booking API + web client | `community-centre-booking/community-centre-booking` | Users/roles, rooms, bookings, approval, cancellation, notifications read API; serves the web client from `src/main/resources/static` |
 | Notification consumer | `notification-consumer` | Consumes booking events, creates member notifications, ignores repeated events, retries and dead-letters failures |
-| Android app | `android-app` *(teammate)* | Member login, rooms, create booking, my bookings, notifications |
+| Android app | `community-centre-booking/android-client` | Member login, room list, booking creation, booking cancellation, booking status, in-app notifications and Android notification banners |
 | RabbitMQ | `docker-compose.yml` | Message broker |
 | Database schema | `database/schema.sql` | Table definitions (tables are also created automatically on start) |
+
+The staff dashboard connects to `/ws/bookings`. When a booking is created, approved, rejected or cancelled, the server sends a WebSocket event and the dashboard reloads the current booking state without manual refresh. After reconnection, it retrieves the complete current state so that missed changes are restored.
 
 ---
 
@@ -43,7 +45,7 @@ A distributed booking system for a community centre. Members book rooms from a *
 
 - Java 21 (Maven wrapper included – no separate Maven install needed)
 - MySQL 8+ (local server or the lecturer-provided server)
-- Docker Desktop (for RabbitMQ)
+- RabbitMQ, using either Docker Desktop or a local installation such as Homebrew
 - Android Studio (for the Android app)
 - `curl` (optional, for API checks)
 
@@ -68,8 +70,13 @@ export DB_PASSWORD="your-password"
 
 ### 3.3 Start in this order
 ```bash
-# 1. RabbitMQ (repository root)
+# 1. Start RabbitMQ using ONE of these options:
+
+# Option A — Docker, from the repository root
 docker compose up -d
+
+# Option B — Homebrew on macOS
+brew services start rabbitmq
 
 # 2. Booking API + web client (terminal 1)
 cd community-centre-booking/community-centre-booking
@@ -79,7 +86,8 @@ cd community-centre-booking/community-centre-booking
 cd notification-consumer
 ./mvnw spring-boot:run
 
-# 4. Android app: open android-app in Android Studio and run on an emulator
+# 4. Android app: open community-centre-booking/android-client
+#    in Android Studio and run it on an emulator
 ```
 
 ### 3.4 Ports
@@ -126,6 +134,15 @@ Errors use `{"code","message","path"}` with 400, 401, 403, 404 or 409.
 {"eventId":"uuid","bookingId":3,"memberId":1,"roomName":"Meeting Room","bookingDate":"2026-10-31",
  "startTime":"09:00:00","oldStatus":"PENDING","newStatus":"APPROVED","occurredAt":"2026-10-25T00:19:10Z"}
 ```
+### WebSocket live updates
+
+The staff dashboard connects to:
+
+```text
+ws://localhost:8080/ws/bookings
+```
+
+The server sends a booking-change message after a successful creation, status update or cancellation. The open dashboard then retrieves the latest bookings through the REST API. If the connection is interrupted, the browser retries the connection and retrieves the current state after reconnecting.
 
 ---
 
@@ -133,14 +150,28 @@ Errors use `{"code","message","path"}` with 400, 401, 403, 404 or 409.
 1. **Booking approval** – member creates a booking on Android (`PENDING`) → staff sees it on the web and approves/rejects → member sees the new status and receives a notification.
 2. **Cancellation frees a slot** – member cancels → the slot no longer blocks other members, who can now book the same time.
 
-Quick check with curl:
+Quick check with `curl`:
+
 ```bash
-curl -u member@test.com:member123 -H "Content-Type: application/json" \
+# Create a pending booking
+curl -i \
+  -u member@test.com:member123 \
+  -H "Content-Type: application/json" \
   -d '{"purpose":"Yoga","bookingDate":"2026-12-01","startTime":"10:00","endTime":"11:00","roomId":1}' \
   http://localhost:8080/api/bookings
-curl -u staff@test.com:staff123 -H "Content-Type: application/json" -X PATCH \
-  -d '{"status":"APPROVED"}' http://localhost:8080/api/bookings/1/status
-curl -u member@test.com:member123 http://localhost:8080/api/notifications/my
+
+# Replace BOOKING_ID with the ID returned above, then approve it
+curl -i \
+  -u staff@test.com:staff123 \
+  -H "Content-Type: application/json" \
+  -X PATCH \
+  -d '{"status":"APPROVED"}' \
+  http://localhost:8080/api/bookings/BOOKING_ID/status
+
+# View the member's notifications after the consumer processes the event
+curl -i \
+  -u member@test.com:member123 \
+  http://localhost:8080/api/notifications/my
 ```
 
 ---
@@ -157,6 +188,7 @@ cd notification-consumer && ./mvnw test
 # 20 simultaneous requests for one slot → expected "1 201" and "19 409"
 bash scripts/race-test.sh 2026-12-05 20
 ```
+Full executed integration-test results, expected and actual outcomes, and evidence filenames are documented in [TEST_RESULTS.md](TEST_RESULTS.md). Supporting screenshots are stored in [`Test Evidence`](Test%20Evidence).
 
 ### Failure demonstrations
 | Case | How |
@@ -173,5 +205,7 @@ bash scripts/race-test.sh 2026-12-05 20
 - The API and the consumer share one MySQL database; the API only reads the `notifications` table written by the consumer.
 - HTTP Basic over plain HTTP is used for the demo; production would need HTTPS and token-based login.
 - Tests use H2; the concurrency fix is verified against MySQL with `scripts/race-test.sh`.
-- Android checks notifications by polling the API rather than push messages.
-- *(Add Android / web / WebSocket limitations here.)*
+- Android notifications are retrieved from the API rather than delivered through a push service such as Firebase Cloud Messaging. If the app is closed, the member does not receive an immediate notification banner.
+- The Android notification permission may be denied. Notifications will still appear inside the app, but Android will not display a system banner.
+- WebSocket live updates are provided on the open staff dashboard. After a disconnection, the browser attempts to reconnect and reloads the complete current booking state.
+- The Android API address uses `10.0.2.2`, which is intended for the standard Android emulator. A physical device would require the backend computer’s network address and suitable network configuration.

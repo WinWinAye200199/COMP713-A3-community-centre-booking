@@ -1,8 +1,8 @@
 # COMP713 Assessment 3 – Integration Test Results
 
-Final commit tested: To be added  
-Test environment: macOS, Android emulator, Chrome, MySQL, RabbitMQ  
-Test date: To be added
+Final commit tested: 8761dd5d29aa42e8ed15130f2a227e87efadb957
+Test environment: macOS, Android emulator API 37, Chrome, Java 21, Spring Boot, local MySQL and local RabbitMQ 
+Test date: 26 October 2026
 
 | ID | Test | Expected result | Actual result | Status | Evidence |
 |---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Test date: To be added
 | T11 | Persistent state after restart | Existing bookings and notifications remain after services restart | After restarting the backend and consumer, the existing cancelled booking and its approval notification were still available from MySQL | Pass | T11-booking-after-restart.png; T11-notification-after-restart.png |
 | T12 | WebSocket reconnection | Dashboard reconnects and retrieves changes missed while disconnected | The dashboard reconnected without a page refresh, retrieved the booking created while offline, and restored current state in 0.236 seconds | Pass | T12-websocket-reconnection.png |
 | T13 | Backend unavailable and recovery | Android shows an error without crashing and recovers after restart | With the backend stopped, Android displayed a connection error and remained usable; after restart, refreshing successfully restored the notification data | Pass | T13-backend-unavailable.png; T13-backend-recovered.png |
-| T14 | Broker/consumer unavailable | Failure is logged and the system remains usable; recovery is demonstrated | While the consumer was stopped, RabbitMQ retained the approval event in its queue. After the consumer restarted, it processed the waiting event and Android displayed the resulting notification | Pass | T14-message-waiting-in-queue.png; T14-consumer-recovery.png |
+| T14 | Notification consumer unavailable | Failure is logged and the system remains usable; recovery is demonstrated | While the consumer was stopped, RabbitMQ retained the approval event in its queue. After the consumer restarted, it processed the waiting event and Android displayed the resulting notification | Pass | T14-message-waiting-in-queue.png; T14-consumer-recovery.png |
 | T15 | API response-time requirement | Representative operation meets the agreed response-time target | Five authenticated GET /api/bookings/my requests averaged 0.383 seconds, with a maximum of 0.706 seconds; all were below the 2-second target | Pass | T15-api-response-times.png |
 | T16 | Automated build checks | Android, backend and consumer test/build commands succeed | Android test and debug build completed successfully, and both Spring Boot projects completed their Maven test suites with BUILD SUCCESS | Pass | T16-android-build.png; T16-backend-tests.png; T16-consumer-tests.png |
 
@@ -42,3 +42,11 @@ Test date: To be added
 - Observed result: 0.236 seconds
 - Outcome: Pass
 
+## Notes and defects
+
+- Android system notifications are generated when the app retrieves new notification records. They are not remote push notifications and do not appear immediately while the app is completely closed.
+- If Android notification permission is denied, the update remains available inside the notification screen.
+- Messages remained safely queued while the notification consumer was unavailable and were processed after it restarted.
+- During an earlier RabbitMQ broker outage, the publisher logged the failure but could not publish the event. That event was not automatically recovered. This remains a reliability limitation.
+- The response-time measurements were taken on a local development environment and do not represent production network conditions.
+- Running the complete system requires MySQL, RabbitMQ, the booking backend and the notification consumer.
