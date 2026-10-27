@@ -3,7 +3,7 @@
 A distributed booking system for a community centre. Members book rooms from a **native Android app**, staff review bookings in a **web client**, and both clients share data through one **Spring Boot REST API** backed by **MySQL**. Booking decisions are published to **RabbitMQ** and processed by a separately running **notification consumer** (advanced integration Path B).
 
 - **Repository:** https://github.com/WinWinAye200199/COMP713-A3-community-centre-booking
-- **Final version:** tag `TBD` / commit `TBD`
+- **Final version:** tag `assessment-3-final`
 - **Baseline (Assessment 2):** community centre booking system by Kelsea (original repo `kelseak1/COMP713-individual-project`, commit `69e2b83`, tagged `a2-baseline` in this repository)
 
 ---

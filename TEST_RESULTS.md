@@ -1,6 +1,6 @@
 # COMP713 Assessment 3 – Integration Test Results
 
-Final commit tested: 8761dd5d29aa42e8ed15130f2a227e87efadb957
+Final version tested: `assessment-3-final`
 Test environment: macOS, Android emulator API 37, Chrome, Java 21, Spring Boot, local MySQL and local RabbitMQ 
 Test date: 26 October 2026
 
